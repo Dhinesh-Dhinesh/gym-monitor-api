@@ -4,12 +4,11 @@ import * as express from "express";
 import { createAdmin } from "../controller/adminController";
 
 // middleware
-// import { verifyAdmin } from "../middleware/verifier/verifyAdmin";
+import { verifyAdmin } from "../middleware/verifier/verifyAdmin";
 import { validate } from "../middleware/validator/index";
 import { createAdminSchema } from "../middleware/validator/schema/adminSchema";
 
 const router = express.Router();
-
 
 /** routes
 
@@ -18,7 +17,7 @@ const router = express.Router();
  
  */
 
-router.post("/create", validate(createAdminSchema), createAdmin);
+router.post("/create", validate(createAdminSchema), verifyAdmin, createAdmin);
 
 
 // export
