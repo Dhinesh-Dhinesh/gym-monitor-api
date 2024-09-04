@@ -23,6 +23,7 @@ export const createAdmin = async (req: CreateAdminRequest, res: Response) => {
         // Create the user with the given properties and set custom claims
         const properties = {
             displayName: name,
+            phoneNumber: "+91" + phone,
             email,
             password,
             emailVerified: true,
