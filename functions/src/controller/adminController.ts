@@ -2,6 +2,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { FieldValue } from 'firebase-admin/firestore';
 import { Response } from "express";
+import { v4 as uuidv4 } from 'uuid';
 
 type CreateAdminRequest = {
     body: {
@@ -59,3 +60,56 @@ export const createAdmin = async (req: CreateAdminRequest, res: Response) => {
         res.status(400).send(err);
     }
 };
+
+type CreatePlan = {
+    body: {
+        name: string,
+        price: number,
+        months: number,
+        gym_id: string,
+    }
+}
+
+export const createPlan = async (req: CreatePlan, res: Response) => {
+    const { name, price, months, gym_id } = req.body;
+
+    try {
+        // Reference to the 'plans' collection inside the gym document
+        const plansRef = admin.firestore()
+            .collection('gyms')
+            .doc(gym_id)
+            .collection('plans');
+
+        // Check if a plan with the same price and months already exists
+        const existingPlanQuery = await plansRef
+            .where('price', '==', price)
+            .where('months', '==', months)
+            .get();
+
+        if (!existingPlanQuery.empty) {
+            // Plan already exists
+            res.status(409).json({ message: 'Plan with this price and months already exists', error: "server/plan-already-exist" });
+            return;
+        }
+
+        // Generate a UUID for the document ID
+        const planId = uuidv4();
+
+        // Reference to the new plan document
+        const planRef = plansRef.doc(planId);
+
+        // Add the new plan to the collection
+        await planRef.set({
+            name,
+            price,
+            months,
+            createdAt: FieldValue.serverTimestamp(), // Optionally add a timestamp
+        });
+
+        // Return the newly created plan's ID
+        res.status(201).json({ message: 'Plan created successfully', planId });
+    } catch (error: any) {
+        console.error('Error creating plan:', error);
+        res.status(500).json({ message: 'Failed to create plan', error: error.message || error });
+    }
+}
