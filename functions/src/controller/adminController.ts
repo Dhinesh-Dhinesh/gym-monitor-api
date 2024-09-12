@@ -150,9 +150,7 @@ type MemberBody = {
     address: string;
     phone: string;
     trainingType: 'general' | 'personal';
-    planId: string;
     joinedAt: string;
-    paidAmount: number;
     notes?: string;
     gym_id: string;
     createdBy: string;
@@ -164,8 +162,30 @@ type MemberData = MemberBody & {
 }
 
 type AddMember = {
-    body: MemberBody;
+    body: MemberBody & {
+        plan: {
+            name: string,
+            months: number,
+            price: number,
+            paidAmount: number
+        }
+    };
 };
+
+type MemberPlan = {
+    name: string,
+    months: number,
+    price: number,
+    paid: number,
+    due: number,
+    gym_id: string,
+    paymentHistory: {
+        id: string
+        paidAmount: number
+        date: Date
+        addedBy: string
+    }[]
+}
 
 /**
  * Creates a new member for the given gym.
@@ -178,11 +198,11 @@ type AddMember = {
  *   - `dob`: The date of birth of the member.
  *   - `address`: The address of the member.
  *   - `joinedAt`: The date the member joined the gym.
- *   - `planId`: The ID of the plan the member has subscribed to.
+ *   - `notes`: The notes about the member.
  *   - `gym_id`: The ID of the gym to which the member belongs.
- *   - `paidAmount`: The amount the member has paid.
  *   - `trainingType`: The type of training the member is subscribed to.
  *   - `createdBy`: The ID of the user who created the member.
+ *   - `plan`: The plan details of the member.
  *
  * @returns A promise that resolves to a JSON response containing the newly
  *   created member's ID if the member is created successfully, or a JSON response
@@ -198,11 +218,10 @@ export const addMember = async (req: AddMember, res: Response) => {
         joinedAt,
         address,
         notes,
-        planId,
         gym_id,
-        paidAmount,
         trainingType,
-        createdBy
+        createdBy,
+        plan
     } = req.body;
 
     try {
@@ -226,8 +245,6 @@ export const addMember = async (req: AddMember, res: Response) => {
             dob,
             createdAt: FieldValue.serverTimestamp(),
             gym_id: gym_id.toLowerCase().trim(),
-            planId,
-            paidAmount,
             trainingType,
             userId: userRecord.uid,
             createdBy: createdBy.trim()
@@ -238,6 +255,7 @@ export const addMember = async (req: AddMember, res: Response) => {
             memberData.notes = notes;
         }
 
+        // set user data on firestore
         await admin
             .firestore()
             .collection('gyms')
@@ -245,6 +263,34 @@ export const addMember = async (req: AddMember, res: Response) => {
             .collection('users')
             .doc(userRecord.uid)
             .set(memberData);
+
+        // set theplan data on firestore
+        const planData: MemberPlan = {
+            name: plan.name,
+            months: plan.months,
+            price: plan.price,
+            paid: plan.paidAmount,
+            due: plan.price - plan.paidAmount,
+            gym_id: gym_id,
+            paymentHistory: [
+                {
+                    id: uuidv4(),
+                    paidAmount: plan.paidAmount,
+                    date: new Date(),
+                    addedBy: createdBy.trim()
+                }
+            ]
+        };
+
+        const plansRef = admin
+            .firestore()
+            .collection('gyms')
+            .doc(gym_id)
+            .collection('users')
+            .doc(userRecord.uid)
+            .collection('plan');
+
+        await plansRef.add(planData);
 
         logger.info(`Member created successfully uid: ${userRecord.uid} name: ${name}`, { structuredData: true });
 
