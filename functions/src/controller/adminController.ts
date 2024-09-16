@@ -1,8 +1,9 @@
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { Response } from "express";
 import { v4 as uuidv4 } from 'uuid';
+import { addMonthsToFirebaseTimestamp } from "../utils/dateTimeFns";
 
 type CreateAdminRequest = {
     body: {
@@ -146,18 +147,22 @@ type MemberBody = {
     name: string;
     email: string;
     gender: 'male' | 'female';
-    dob: string;
+    dob: Timestamp;
     address: string;
     phone: string;
     trainingType: 'general' | 'personal';
-    joinedAt: string;
+    joinedAt: Timestamp;
     notes?: string;
     gym_id: string;
     createdBy: string;
 };
 
 type MemberData = MemberBody & {
+    totalToBePaid: number;
+    totalPaid: number;
+    totalDue: number;
     createdAt: FieldValue;
+    expiresAt: Timestamp;
     userId: string;
 }
 
@@ -178,17 +183,20 @@ type MemberPlan = {
     price: number,
     paid: number,
     due: number,
+    purchasedAt: Timestamp,
+    expiresAt: Timestamp,
     gym_id: string,
-    paymentHistory: {
-        id: string
-        paidAmount: number
-        date: Date
-        addedBy: string
-    }[]
 }
 
+type PaymentHistory = {
+    paidAmount: number
+    date: Timestamp
+    addedBy: string
+}
+
+
 /**
- * Creates a new member for the given gym.
+ * Creates a new member user for the given gym.
  *
  * @param req.body - The request body must contain the following properties:
  *   - `name`: The name of the member.
@@ -235,17 +243,28 @@ export const addMember = async (req: AddMember, res: Response) => {
 
         const userRecord = await admin.auth().createUser(userProperties);
 
+        const due = plan.price - plan.paidAmount;
+
+        // Convert { nano, seconds } to Firestore Timestamp
+        const dobTimestamp = new Timestamp(dob.seconds, dob.nanoseconds);
+        const joinedAtTimestamp = new Timestamp(joinedAt.seconds, joinedAt.nanoseconds);
+
+
         const memberData: MemberData = {
             name,
             email,
             phone,
             gender,
-            joinedAt,
+            trainingType,
             address,
-            dob,
+            dob: dobTimestamp,
+            totalToBePaid: plan.price,
+            totalPaid: plan.paidAmount,
+            totalDue: due,
+            joinedAt: joinedAtTimestamp,
+            expiresAt: addMonthsToFirebaseTimestamp(joinedAtTimestamp, plan.months),
             createdAt: FieldValue.serverTimestamp(),
             gym_id: gym_id.toLowerCase().trim(),
-            trainingType,
             userId: userRecord.uid,
             createdBy: createdBy.trim()
         };
@@ -264,22 +283,16 @@ export const addMember = async (req: AddMember, res: Response) => {
             .doc(userRecord.uid)
             .set(memberData);
 
-        // set theplan data on firestore
+        // set the plan data on firestore
         const planData: MemberPlan = {
             name: plan.name,
             months: plan.months,
             price: plan.price,
             paid: plan.paidAmount,
-            due: plan.price - plan.paidAmount,
+            due,
+            purchasedAt: joinedAtTimestamp,
+            expiresAt: addMonthsToFirebaseTimestamp(joinedAtTimestamp, plan.months),
             gym_id: gym_id,
-            paymentHistory: [
-                {
-                    id: uuidv4(),
-                    paidAmount: plan.paidAmount,
-                    date: new Date(),
-                    addedBy: createdBy.trim()
-                }
-            ]
         };
 
         const plansRef = admin
@@ -290,7 +303,30 @@ export const addMember = async (req: AddMember, res: Response) => {
             .doc(userRecord.uid)
             .collection('plan');
 
-        await plansRef.add(planData);
+        // Add the plan and get the document reference
+        const planDocRef = await plansRef.add(planData);
+
+        // Retrieve the plan document ID
+        const planId = planDocRef.id;
+
+        // set the payment history on firestore
+        const paymentHistory: PaymentHistory = {
+            paidAmount: plan.paidAmount,
+            date: Timestamp.now(),
+            addedBy: createdBy
+        };
+
+        const paymentHistoryRef = admin
+            .firestore()
+            .collection('gyms')
+            .doc(gym_id)
+            .collection('users')
+            .doc(userRecord.uid)
+            .collection('plan')
+            .doc(planId)
+            .collection('paymentHistory');
+
+        await paymentHistoryRef.add(paymentHistory);
 
         logger.info(`Member created successfully uid: ${userRecord.uid} name: ${name}`, { structuredData: true });
 
