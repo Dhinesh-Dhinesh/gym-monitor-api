@@ -150,6 +150,7 @@ type MemberBody = {
     dob: Timestamp;
     address: string;
     phone: string;
+    profilePicUrl: string | null;
     trainingType: 'general' | 'personal';
     joinedAt: Timestamp;
     notes?: string;
@@ -229,7 +230,8 @@ export const addMember = async (req: AddMember, res: Response) => {
         gym_id,
         trainingType,
         createdBy,
-        plan
+        plan,
+        profilePicUrl
     } = req.body;
 
     try {
@@ -254,6 +256,7 @@ export const addMember = async (req: AddMember, res: Response) => {
             name,
             email,
             phone,
+            profilePicUrl,
             gender,
             trainingType,
             address,

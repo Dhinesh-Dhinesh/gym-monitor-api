@@ -7,6 +7,7 @@ type MemberBody = {
     dob: () => any;
     address: string;
     phone: string;
+    profilePicUrl: string| null;
     trainingType: 'general' | 'personal';
     joinedAt: () => any;
     notes?: string;
@@ -40,6 +41,7 @@ export const addMemberSchema = Joi.object<AddMember, true>({
     dob: Joi.custom(isValidTimestamp, 'Timestamp validation').required(),
     address: Joi.string().required(),
     phone: Joi.string().required(),
+    profilePicUrl: Joi.string().allow(null),
     trainingType: Joi.string().valid('general', 'personal').required(),
     joinedAt: Joi.custom(isValidTimestamp, 'Timestamp validation').required(),
     notes: Joi.string(),
