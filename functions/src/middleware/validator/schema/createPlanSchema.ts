@@ -7,7 +7,7 @@ type AddPlan = {
     gym_id: string;
 };
 
-export const addPlanSchema = Joi.object<AddPlan, true>({
+export const createPlanSchema = Joi.object<AddPlan, true>({
     name: Joi.string().required(),
     price: Joi.number().required(),
     months: Joi.number().required(),

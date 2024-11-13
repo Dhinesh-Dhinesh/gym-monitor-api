@@ -34,7 +34,7 @@ const isValidTimestamp = (value: any, helpers: Joi.CustomHelpers): any => {
 
 
 
-export const addMemberSchema = Joi.object<AddMember, true>({
+export const createMemberSchema = Joi.object<AddMember, true>({
     name: Joi.string().required(),
     email: Joi.string().email().required(),
     gender: Joi.string().valid('male', 'female').required(),

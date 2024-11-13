@@ -167,7 +167,7 @@ type MemberData = MemberBody & {
     userId: string;
 }
 
-type AddMember = {
+type createMember = {
     body: MemberBody & {
         plan: {
             name: string,
@@ -217,7 +217,7 @@ type PaymentHistory = {
  *   created member's ID if the member is created successfully, or a JSON response
  *   containing an error message if the member already exists or if an error occurs.
  */
-export const addMember = async (req: AddMember, res: Response) => {
+export const createMember = async (req: createMember, res: Response) => {
     const {
         name,
         gender,
