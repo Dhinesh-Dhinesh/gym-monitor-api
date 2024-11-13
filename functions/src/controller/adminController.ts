@@ -368,6 +368,8 @@ export const addPayment = async (req: AddPayment, res: Response) => {
     const planDocRef = db.doc(`gyms/${gymId}/users/${userId}/plan/${planId}`);
     const paymentsCollectionRef = db.collection(`gyms/${gymId}/users/${userId}/plan/${planId}/paymentHistory`);
 
+    let newPaymentData = {};
+
     // Step 2: Run Firestore transaction for atomic operations
     try {
         // Using the transaction to perform multiple operations atomically
@@ -409,15 +411,17 @@ export const addPayment = async (req: AddPayment, res: Response) => {
             const newPaymentRef = paymentsCollectionRef.doc(); // auto-generated ID
             const dateTimeStamp = new Timestamp(date.seconds, date.nanoseconds);
 
-            t.set(newPaymentRef, {
+            newPaymentData = {
                 addedBy: addedBy.trim(),
                 date: dateTimeStamp,
                 paidAmount: amount,
-            });
+            };
+
+            t.set(newPaymentRef, newPaymentData);
         });
 
         // Step 9: If transaction is successful, send response
-        res.status(200).json({ message: "Payment added successfully" });
+        res.status(200).json({ message: "Payment added successfully", data: newPaymentData });
     } catch (error) {
         // Step 10: Handle transaction failure
         res.status(400).json({ message: "Error adding payment", error: error instanceof Error ? error.message : "UNKNOWN_ERROR" });
