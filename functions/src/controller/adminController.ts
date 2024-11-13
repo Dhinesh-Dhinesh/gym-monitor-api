@@ -340,3 +340,86 @@ export const createMember = async (req: createMember, res: Response) => {
         res.status(400).send(err);
     }
 };
+
+export type AddPayment = {
+    body: {
+        meta: {
+            gymId: string,
+            userId: string,
+            planId: string,
+        },
+        data: {
+            date: Timestamp,
+            amount: number,
+            addedBy: string
+        }
+    }
+}
+
+export const addPayment = async (req: AddPayment, res: Response) => {
+    // Extract data from the request body
+    const { gymId, userId, planId } = req.body.meta;
+    const { date, amount, addedBy } = req.body.data;
+
+    const db = admin.firestore();
+
+    // Step 1: Create references for user, plan, and payment collection in Firestore
+    const userDocRef = db.doc(`gyms/${gymId}/users/${userId}`);
+    const planDocRef = db.doc(`gyms/${gymId}/users/${userId}/plan/${planId}`);
+    const paymentsCollectionRef = db.collection(`gyms/${gymId}/users/${userId}/plan/${planId}/paymentHistory`);
+
+    // Step 2: Run Firestore transaction for atomic operations
+    try {
+        // Using the transaction to perform multiple operations atomically
+        await db.runTransaction(async (t) => {
+            // Step 3: Retrieve user and plan documents
+            const userDoc = await t.get(userDocRef);
+            const planDoc = await t.get(planDocRef);
+
+            const planDocData = planDoc.data();
+            const userDocData = userDoc.data();
+
+            // Step 4: Check if the documents exist
+            if (
+                !planDocData ||
+                planDocData.paid === undefined ||
+                planDocData.due === undefined ||
+                !userDocData ||
+                userDocData.totalPaid === undefined ||
+                userDocData.totalDue === undefined
+            ) {
+                throw new Error("MISSING_REQUIRED_FIELDS_OR_DOCUMENT_NOT_FOUND");
+            }
+            // Step 5: Validate that the payment amount does not exceed the plan's due amount
+            if (amount > planDocData.due) {
+                throw new Error("AMOUNT_CANNOT_BE_GREATER_THAN_DUE");
+            }
+
+            // Step 6: Calculate and update `totalPaid` and `totalDue` in the user document
+            const newTotalPaid = userDocData.totalPaid + amount;
+            const newTotalDue = userDocData.totalDue - amount;
+            t.update(userDocRef, { totalPaid: newTotalPaid, totalDue: newTotalDue });
+
+            // Step 7: Calculate and update `paidAmount` and `due` in the plan document
+            const newPaidAmount = planDocData.paid + amount;
+            const newPlanDue = planDocData.due - amount;
+            t.update(planDocRef, { paid: newPaidAmount, due: newPlanDue });
+
+            // Step 8: Add a new payment entry to the payments subcollection
+            const newPaymentRef = paymentsCollectionRef.doc(); // auto-generated ID
+            const dateTimeStamp = new Timestamp(date.seconds, date.nanoseconds);
+
+            t.set(newPaymentRef, {
+                addedBy: addedBy.trim(),
+                date: dateTimeStamp,
+                paidAmount: amount,
+            });
+        });
+
+        // Step 9: If transaction is successful, send response
+        res.status(200).json({ message: "Payment added successfully" });
+    } catch (error) {
+        // Step 10: Handle transaction failure
+        res.status(400).json({ message: "Error adding payment", error: error instanceof Error ? error.message : "UNKNOWN_ERROR" });
+    }
+};

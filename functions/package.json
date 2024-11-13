@@ -8,7 +8,7 @@
     "start": "yarn shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "emu": "yarn build && firebase emulators:start"
+    "emu": "yarn build && firebase emulators:start --import=firebase-export-1731495017184HIY8hk --export-on-exit=emulator_backup_20241113"
   },
   "engines": {
     "node": "18"

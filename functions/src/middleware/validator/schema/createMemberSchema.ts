@@ -25,7 +25,7 @@ type AddMember = MemberBody & {
 };
 
 // Custom function to validate if value is a valid Timestamp
-const isValidTimestamp = (value: any, helpers: Joi.CustomHelpers): any => {
+export const isValidTimestamp = (value: any, helpers: Joi.CustomHelpers): any => {
     if (typeof value !== 'object' || value === null || !('seconds' in value) || !('nanoseconds' in value)) {
         return helpers.error('any.invalid');
     }
