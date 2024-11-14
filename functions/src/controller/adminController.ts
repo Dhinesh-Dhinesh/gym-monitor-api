@@ -356,6 +356,24 @@ export type AddPayment = {
     }
 }
 
+/**
+ * Adds a payment to a user's plan in a gym.
+ *
+ * @param req.body - The request body must contain the following properties:
+ *    - `meta`: An object with the following properties:
+ *     - `gymId`: The ID of the gym to which the user belongs.
+ *     - `userId`: The ID of the user to which the payment belongs.
+ *     - `planId`: The ID of the plan to which the payment belongs.
+ *    - `data`: An object with the following properties:
+ *     - `date`: The date of the payment in seconds and nanoseconds.
+ *     - `amount`: The amount of the payment.
+ *     - `addedBy`: The ID of the user who made the payment.
+ *
+ * @returns A promise that resolves to a JSON response containing the newly
+ *   created payment's ID and the payment data if the payment is created
+ *   successfully, or a JSON response containing an error message if the
+ *   payment is not created successfully.
+ */
 export const addPayment = async (req: AddPayment, res: Response) => {
     // Extract data from the request body
     const { gymId, userId, planId } = req.body.meta;
@@ -430,3 +448,81 @@ export const addPayment = async (req: AddPayment, res: Response) => {
         res.status(400).json({ message: "Error adding payment", error: error instanceof Error ? error.message : "UNKNOWN_ERROR" });
     }
 };
+
+type DeletePayment = {
+    body: {
+        gymId: string;
+        userId: string;
+        planId: string;
+        paymentId: string;
+    }
+}
+
+/**
+ * Deletes a payment from a user's plan in a gym.
+ *
+ * @param req.body - The request body must contain the following properties:
+ *    - `gymId`: The ID of the gym to which the user belongs.
+ *    - `userId`: The ID of the user to which the payment belongs.
+ *    - `planId`: The ID of the plan to which the payment belongs.
+ *    - `paymentId`: The ID of the payment to be deleted.
+ *
+ * @returns A promise that resolves to a JSON response containing a success
+ *   message if the payment is deleted successfully, or a JSON response
+ *   containing an error message if the payment is not deleted successfully.
+ */
+export const deletePayment = async (req: DeletePayment, res: Response) => {
+    const { gymId, userId, planId, paymentId } = req.body;
+
+    const db = admin.firestore();
+
+    //create it as a transaction before delete update totalPaid and totalDue and plan due and paid
+
+    const userDocRef = db.doc(`gyms/${gymId}/users/${userId}`);
+    const planDocRef = db.doc(`gyms/${gymId}/users/${userId}/plan/${planId}`);
+    const paymentDocRef = db.doc(`gyms/${gymId}/users/${userId}/plan/${planId}/paymentHistory/${paymentId}`);
+
+    try {
+        await db.runTransaction(async (t) => {
+            const userDoc = await t.get(userDocRef);
+            const planDoc = await t.get(planDocRef);
+            const paymentDoc = await t.get(paymentDocRef);
+
+            const userDocData = userDoc.data();
+            const planDocData = planDoc.data();
+            const paymentDocData = paymentDoc.data();
+
+            if (!userDocData || typeof userDocData.totalPaid !== 'number' || typeof userDocData.totalDue !== 'number') {
+                throw new Error("User document is missing required fields: totalPaid or totalDue.");
+            }
+
+            if (!planDocData || typeof planDocData.paid !== 'number' || typeof planDocData.due !== 'number') {
+                throw new Error("Plan document is missing required fields: paid or due.");
+            }
+
+            if (!paymentDocData || typeof paymentDocData.paidAmount !== 'number') {
+                throw new Error("Payment document is missing the required field: paidAmount.");
+            }
+
+            const paidAmount = paymentDocData.paidAmount;
+
+            t.update(userDocRef, {
+                totalPaid: userDocData.totalPaid - paidAmount,
+                totalDue: userDocData.totalDue + paidAmount
+            });
+
+            t.update(planDocRef, {
+                paid: planDocData.paid - paidAmount,
+                due: planDocData.due + paidAmount
+            });
+
+            t.delete(paymentDocRef);
+
+        });
+
+        res.status(200).json({ message: "Payment deleted successfully" });
+
+    } catch (error) {
+        res.status(400).json({ message: "Error deleting payment", error: error instanceof Error ? error.message : "UNKNOWN_ERROR" });
+    }
+}
