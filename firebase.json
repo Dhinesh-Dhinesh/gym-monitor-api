@@ -1,28 +1,30 @@
-  {
-    "functions": [
-      {
-        "source": "functions",
-        "codebase": "default",
-        "ignore": [
-          "node_modules",
-          ".git",
-          "firebase-debug.log",
-          "firebase-debug.*.log"
-        ],
-        "predeploy": [
-          "yarn --cwd \"$RESOURCE_DIR\" build"
-        ]
-      }
+{
+  "functions": {
+    "source": "functions",
+    "codebase": "default",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log"
     ],
-    "emulators": {
-      "functions": {
-        "port": 5001
-      },
-      "firestore": {
-        "port": 8080
-      },
-      "auth": {
-        "port": 9099
-      }
+    "predeploy": [
+      "yarn --cwd \"$RESOURCE_DIR\" build"
+    ]
+  },
+  "emulators": {
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "auth": {
+      "port": 9099
     }
+  },
+  "storage": {
+    "port": 9199,
+    "rules": "storage.rules"
   }
+}

@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service firebase.storage {
+  
+  // Function to check if the user is an admin
+  function isAdmin() {
+    return request.auth != null && request.auth.token.admin == true;
+  }
+  
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      // Allow read access to everyone
+      allow read: if true;
+
+      // Allow write access only to admins
+      allow write: if isAdmin();
+    }
+  }
+}
