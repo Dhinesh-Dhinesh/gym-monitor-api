@@ -4,7 +4,7 @@ service firebase.storage {
   
   // Function to check if the user is an admin
   function isAdmin() {
-    return request.auth != null && request.auth.token.admin == true;
+    return request.auth != null && request.auth.token.admin == true || false;
   }
   
   match /b/{bucket}/o {
