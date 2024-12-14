@@ -25,7 +25,6 @@ export const verifyAdmin = async (req: any, res: Response, next: any) => {
                 });
             }
         } catch (error) {
-            logger.error(error);
             res.status(403).send({
                 message: "Invalid token"
             });

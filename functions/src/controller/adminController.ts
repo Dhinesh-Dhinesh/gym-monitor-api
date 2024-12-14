@@ -1,9 +1,14 @@
 import * as logger from "firebase-functions/logger";
-import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { Response } from "express";
 import { v4 as uuidv4 } from 'uuid';
 import { addMonthsToFirebaseTimestamp } from "../utils/dateTimeFns";
+import admin from "../utils/firebase";
+import { Files } from "formidable-serverless";
+import { uploadProfileImage } from "../utils/updateProfileImage";
+
+const db = admin.firestore();
+const auth = admin.auth();
 
 type CreateAdminRequest = {
     body: {
@@ -245,6 +250,8 @@ export const createMember = async (req: createMember, res: Response) => {
 
         const userRecord = await admin.auth().createUser(userProperties);
 
+        //!FIX : Need to set custom claims for the user
+
         const due = plan.price - plan.paidAmount;
 
         // Convert { nano, seconds } to Firestore Timestamp
@@ -340,6 +347,144 @@ export const createMember = async (req: createMember, res: Response) => {
         res.status(400).send(err);
     }
 };
+
+
+type updateMember = {
+    params: {
+        gymId: string,
+        userId: string
+    },
+    body: {
+        name?: string,
+        email?: string,
+        phone?: string,
+        gender?: string,
+        dob?: string | Timestamp,
+        trainingType?: string,
+        address?: string,
+        notes?: string,
+    },
+    files?: Files
+}
+
+/**
+ * Updates a user in a gym.
+ *
+ * @param req.params - The request query must contain the following properties:
+ *   - `gymId`: The ID of the gym to which the user belongs.
+ *   - `userId`: The ID of the user to be updated.
+ *
+ * @param req.body - The request body must contain the fields to be updated.
+ *   - `name`: The name of the user.
+ *   - `email`: The email of the user.
+ *   - `phone`: The phone number of the user.
+ *   - `gender`: The gender of the user.
+ *   - `dob`: The date of birth of the user.
+ *   - `joinedAt`: The date when the user joined the gym.
+ *   - `address`: The address of the user.
+ *   - `trainingType`: The training type of the user.
+ *   - `notes`: The notes for the user.
+ * @param req.files - The request files contain the profile picture of the user.
+ *
+ * @returns A promise that resolves to a JSON response containing a success
+ *   message if the user is updated successfully, or a JSON response containing
+ *   an error message if the user is not updated successfully.
+ */
+export const updateMember = async (req: updateMember, res: Response) => {
+    const { gymId, userId } = req.params;
+    const {
+        name,
+        email,
+        phone,
+        gender,
+        dob,
+        trainingType,
+        address,
+        notes,
+    } = req.body;
+
+    try {
+
+        if (!gymId || !userId) {
+            res.status(400).json({ message: "Gym ID and User ID are required" });
+            return;
+        }
+
+        // Object to hold the updated data
+        const authUpdateData: admin.auth.UpdateRequest = {};
+        const updateData: Partial<updateMember['body']> & { profilePicUrl?: string, lastUpdated?: Timestamp } = {};
+
+        // Check if the user exists
+        const userRef = db.doc(`gyms/${gymId}/users/${userId}`);
+        const userSnapshot = await userRef.get();
+
+        // If the user doesn't exist, return an error
+        if (!userSnapshot.exists) {
+            res.status(404).json({ message: "User not found." });
+            return;
+        }
+
+        // Upload profile image if provided
+        const profileImage = req?.files?.profilePicUrl;
+        if (profileImage) {
+            const { error, value } = await uploadProfileImage({ profileImage, gymId, userId });
+
+            if (error) {
+                res.status(400).json({ message: error });
+                return;
+            }
+
+            // Add profile image URL to update data
+            updateData.profilePicUrl = value;
+        }
+
+        // Check if there is data to update
+        if (name) {
+            updateData.name = name;
+            authUpdateData.displayName = name.trim();
+        }
+        if (email) {
+            updateData.email = email;
+            authUpdateData.email = email.trim();
+            authUpdateData.emailVerified = true;
+        }
+        if (phone) {
+            updateData.phone = phone;
+            authUpdateData.phoneNumber = '+91' + phone;
+        }
+        if (gender) updateData.gender = gender;
+        if (dob) updateData.dob = Timestamp.fromDate(new Date(dob as string));
+        if (trainingType) updateData.trainingType = trainingType;
+        if (address) updateData.address = address;
+        if (notes) updateData.notes = notes;
+
+        // Update Firestore Document if there is data to update
+        if (Object.keys(updateData).length > 0) {
+            updateData.lastUpdated = Timestamp.now();
+            await userRef.update(updateData);
+        }
+
+        // Update Firebase Auth Profile if there is data to update
+        if (Object.keys(authUpdateData).length > 0) {
+            await auth.updateUser(userId, authUpdateData);
+        }
+
+        // Check if any update data is present
+        const noUpdateData = Object.keys(authUpdateData).length === 0 && Object.keys(updateData).length === 0;
+
+        if (noUpdateData) {
+            res.status(400).send({ message: "No changes detected. Please provide data to update." });
+            return;
+        }
+
+        logger.info(`Member updated successfully uid: ${userId}`, { structuredData: true });
+
+        res.status(200).send({ message: "MEMBER_UPDATED", updatedData: updateData });
+    } catch (error) {
+        console.error("Error updating user:", error);
+        res.status(500).send({ message: "Failed to update user.", error });
+    }
+}
 
 export type AddPayment = {
     body: {

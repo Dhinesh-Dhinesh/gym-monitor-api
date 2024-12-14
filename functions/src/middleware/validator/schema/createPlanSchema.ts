@@ -12,4 +12,4 @@ export const createPlanSchema = Joi.object<AddPlan, true>({
     price: Joi.number().required(),
     months: Joi.number().required(),
     gym_id: Joi.string().required(),
-}).unknown(false).strict();;
+}).unknown(false).strict();
